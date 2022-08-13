@@ -6,10 +6,12 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager current = null;
 
+    [SerializeField] GameController gameController = null;
     [SerializeField] AnimationManager animationManager = null;
     [SerializeField] AudioManager audioManager = null;
     [SerializeField] DialogManager dialogManager = null;
 
+    public GameController Ctrl => gameController;
     public AnimationManager Anim => animationManager;
     public AudioManager Audio => audioManager;
     public DialogManager Dialog => dialogManager;

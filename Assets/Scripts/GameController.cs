@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class PlayerController : MonoBehaviour
+public class GameController : MonoBehaviour
 {
-    [SerializeField] float gameSpeed = 1;
+    public float gameSpeed = 1;
+    public int score = 0;
 
     [SerializeField] Text scoreDisplay = null;
     [SerializeField] GameObject[] spawners = null;
@@ -13,7 +14,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] GameObject turtPrefab = null;
     [SerializeField] GameObject tortPrefab = null;
 
-    enum GameState
+    public enum GameState
     {
         TURTORIAL,
         INTRO,
@@ -22,8 +23,9 @@ public class PlayerController : MonoBehaviour
         END
     }
 
-    GameState state = GameState.INTRO;
-    int score = 0;
+    public GameState state = GameState.TURTORIAL;
+    bool turtorialStarted = false;
+
     public List<GameObject> terts = new List<GameObject>();
     public List<bool> tertIDs = new List<bool>();
     bool firstSpawn = false;
@@ -40,7 +42,13 @@ public class PlayerController : MonoBehaviour
         switch (state)
         {
             case GameState.TURTORIAL:
+                if (turtorialStarted == false)
+                {
+                    GameManager.current.Dialog.BeginDialog();
+                    turtorialStarted = true;
+                }
                 break;
+
             case GameState.INTRO:
                 if (firstSpawn == false)
                 {
@@ -59,7 +67,9 @@ public class PlayerController : MonoBehaviour
                 }
 
                 if (terts[0].transform.position.x <= 0.1f)
+                {
                     state = GameState.WAIT;
+                }
                 break;
 
             case GameState.WAIT:
@@ -71,7 +81,7 @@ public class PlayerController : MonoBehaviour
 
                     state = GameState.GO;
                     firstSpawn = false;
-                    gameSpeed += 0.2f;
+                    gameSpeed += gameSpeed < 20.0f ? 0.2f : 0.0f;
                     currentTertAnimator.SetBool("InputHit", true);
                     currentTertAnimator.SetBool("FailedInput", false);
                 }
@@ -81,6 +91,7 @@ public class PlayerController : MonoBehaviour
                     scoreDisplay.text = "boooo";
                     currentTertAnimator.SetBool("InputHit", true);
                     currentTertAnimator.SetBool("FailedInput", true);
+                    state = GameState.END;
                 }
                 break;
 
@@ -145,7 +156,7 @@ public class PlayerController : MonoBehaviour
     {
         int num = Random.Range(0, 99);
 
-        if (num < 33)
+        if (num < 33) // roughly 1/3 each
         {
             return 0;
         }

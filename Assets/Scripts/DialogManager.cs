@@ -1,35 +1,45 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.Networking;
 
 public class DialogManager : MonoBehaviour
 {
-    public static DialogManager current = null;
+    [SerializeField] GameObject dialogBox = null;
+    [SerializeField] Text dialogText = null;
 
-    public GameObject dialogBox = null;
-    public Text dialogText = null;
+    [SerializeField] GameObject dummyTurt = null;
+    [SerializeField] GameObject dummyTort = null;
 
-    Dictionary<uint, List<string>> dialogDictionary = new Dictionary<uint, List<string>>();
+    [SerializeField] float printTime = 0.03f;
+    [SerializeField] float pauseTime = 0.5f;
+    float timer = 0;
+    bool waitForEvent = false;
 
-    string dialogFilePath = Application.streamingAssetsPath + "/dialog.txt";
-    List<string> currentPendingDialog = new List<string>();
-    public Animator currentAnimator = null;
-
-    public bool allowProgression = true;
-    bool isLoaded = false;
-
-    public GameObject startTrigger = null;
+    List<string> dialogLines = new List<string>();
+    string currentLine = null;
+    int currentLineID = 0;
+    int currentCharID = 0;
+    int currentEventID = 1;
 
     enum DialogState
     {
-        Starting,
-        Continuing,
+        StartLine,
+        Printing,
         DecidingNextState,
         WaitForNext,
         WaitForClose,
+        WaitForContinue,
+        WaitForEvent,
+        Pause,
+        Event01,
+        Event02,
+        Event03,
+        Event04,
+        Event05,
+        Event06,
+        Event07,
+        Event08,
         Closed
     }
 
@@ -37,33 +47,35 @@ public class DialogManager : MonoBehaviour
 
     private void Start()
     {
-        StartCoroutine(LoadDialogFromFile());
+        LoadDialog();
     }
 
     private void Update()
     {
-        if (isLoaded == false)
-            return;
-
         switch (currentDialogState)
         {
-            case DialogState.Starting:
+            case DialogState.StartLine:
                 {
-                    LoadNextDialogLine(true);
-                    currentDialogState = DialogState.DecidingNextState;
+                    ProcessNextDialogLine(true);
+                    currentDialogState = DialogState.Printing;
                 }
                 break;
 
-            case DialogState.Continuing:
+            case DialogState.Printing:
                 {
-                    LoadNextDialogLine();
-                    currentDialogState = DialogState.DecidingNextState;
+                    timer += Time.deltaTime;
+
+                    if (timer >= printTime)
+                    {
+                        ProcessNextDialogLine();
+                        timer = 0;
+                    }
                 }
                 break;
 
             case DialogState.DecidingNextState:
                 {
-                    if (currentPendingDialog.Count > 0)
+                    if (currentLineID <= dialogLines.Count - 2)
                         currentDialogState = DialogState.WaitForNext;
                     else
                         currentDialogState = DialogState.WaitForClose;
@@ -71,21 +83,119 @@ public class DialogManager : MonoBehaviour
                 break;
 
             case DialogState.WaitForNext:
-                if (Input.GetMouseButtonDown(0) && allowProgression)
+                if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Return))
                 {
-                    currentDialogState = DialogState.Continuing;
-                    GameManager.current.Audio.SFXSource_Default.PlayOneShot(GameManager.current.Audio.SFX_Dialogboop);
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
                 }
                 break;
 
             case DialogState.WaitForClose:
-                if (Input.GetMouseButtonDown(0) && allowProgression)
+                timer += Time.deltaTime;
+
+                if (timer >= 1.0f)
                 {
-                    EndDialogBlock();
-                    currentDialogState = DialogState.Closed;
-                    GameManager.current.Audio.SFXSource_Default.PlayOneShot(GameManager.current.Audio.SFX_Dialogboop);
-                    GameManager.current.Audio.SFXSource_Default.Stop();
+                    EndDialog();
+                    timer = 0;
                 }
+                break;
+
+            case DialogState.WaitForContinue:
+                if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Return))
+                {
+                    currentDialogState = DialogState.Printing;
+                }
+                break;
+
+            case DialogState.Pause:
+                if (timer >= pauseTime)
+                {
+                    currentDialogState = DialogState.Printing;
+                    timer = 0;
+                    break;
+                }
+
+                timer += Time.deltaTime;
+                break;
+
+            case DialogState.Event01:
+                if (dummyTurt.transform.position.x <= 0)
+                {
+                    currentCharID = 0;
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
+                }
+
+                dummyTurt.transform.position -= new Vector3(Time.deltaTime * GameManager.current.Ctrl.gameSpeed, 0, 0);
+                break;
+
+            case DialogState.Event02:
+                if (Input.GetKeyDown(KeyCode.E))
+                {
+                    dummyTurt.GetComponent<Animator>().SetBool("InputHit", true);
+                    dummyTurt.GetComponent<Animator>().SetBool("FailedInput", false);
+                    currentCharID = 0;
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
+                }
+                break;
+
+            case DialogState.Event03:
+                dummyTurt.transform.position -= new Vector3(Time.deltaTime * GameManager.current.Ctrl.gameSpeed, 0, 0);
+
+                timer += Time.deltaTime;
+
+                if (timer >= printTime)
+                {
+                    ProcessNextDialogLine();
+                    timer = 0;
+                }
+
+                if (dummyTurt.transform.position.x <= -10.0f)
+                    waitForEvent = false;
+                break;
+
+            case DialogState.Event04:
+                dummyTort.GetComponent<Animator>().SetInteger("IdleLV", 2);
+
+                if (dummyTort.transform.position.x <= 0)
+                {
+                    currentCharID = 0;
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
+                }
+
+                dummyTort.transform.position -= new Vector3(Time.deltaTime * GameManager.current.Ctrl.gameSpeed, 0, 0);
+                break;
+
+            case DialogState.Event05:
+                timer += Time.deltaTime;
+
+                if (timer >= 5.0f)
+                {
+                    timer = 0;
+                    currentCharID = 0;
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
+                }
+                break;
+
+            case DialogState.Event06:
+                timer += Time.deltaTime;
+
+                if (timer >= 2.0f)
+                {
+                    timer = 0;
+                    currentCharID = 0;
+                    ++currentLineID;
+                    currentDialogState = DialogState.StartLine;
+                }
+                break;
+
+            case DialogState.Event07:
+                break;
+
+            case DialogState.Event08:
                 break;
 
             case DialogState.Closed:
@@ -93,198 +203,144 @@ public class DialogManager : MonoBehaviour
         }
     }
 
-    public void LoadNextDialogBlock(uint dialogID = 0)
+    void ProcessNextDialogLine(bool begin = false)
     {
-        // find dialog block in dictionary by ID
-        if (dialogDictionary.TryGetValue(dialogID, out List<string> lines))
-            currentPendingDialog = lines;
-
-        currentDialogState = DialogState.Starting;
-    }
-
-    public bool IsLastBox()
-    {
-        return currentDialogState == DialogState.WaitForClose;
-    }
-
-    public bool IsClosed()
-    {
-        return currentDialogState == DialogState.Closed;
-    }
-
-    void LoadNextDialogLine(bool firstLine = false)
-    {
-        string line = currentPendingDialog[0];
-        int trimNo = 0;
-
-        while (line[trimNo] == '[') // get dialog line attributes
+        if (begin) // prepare line
         {
-            char attributeCode = line[trimNo + 1];
+            dialogText.text = "";
+            currentLine = dialogLines[currentLineID];
+            return;
+        }
 
-            Debug.Log("Processing line: " + line);
-            Debug.Log("Current trimNo: " + trimNo);
-            Debug.Log("Attr code: " + attributeCode);
+        if (currentCharID >= currentLine.Length) // check for if end of line printed, probably should actually hit because of n control code
+        {
+            if (waitForEvent == false)
+            {
+                // exit print state, reset ready for next line
+                currentDialogState = DialogState.DecidingNextState;
+                currentCharID = 0;
+                return;
+            }
+            else
+            {
+                return; // wait for event to switch bool before doing more dialog
+            }    
+        }
+
+        if (currentLine[currentCharID] != '[') // print dialog char to screen
+        {
+            dialogText.text += currentLine[currentCharID];
+            ++currentCharID;
+        }
+        else // not dialog char, do control code functions
+        {
+            char attributeCode = currentLine[currentCharID + 1];
 
             switch (attributeCode)
             {
-                case 'A': // get next animation property
-                    {
-                        Debug.Log("Processing animation");
-
-                        int.TryParse(line[trimNo + 2].ToString(), out int idx);
-
-
-                        int.TryParse(line[trimNo + 3].ToString(), out idx);
-                        int.TryParse(line[trimNo + 4].ToString(), out int idx2);
-
-                        if (currentAnimator != null)
-                            //currentAnimator.SetBool(GameManager.current.animatorPropertyList[idx], idx2 == 1);
-
-                        trimNo += 6;
-                    }
+                case 'p': // pause printing briefly for emphasis
+                    currentDialogState = DialogState.Pause;
+                    currentCharID += 3;
                     break;
 
-                    throw new System.Exception("Something went wrong trying to read dialog line attribute " + attributeCode + " from line [" + currentPendingDialog + "]");
+                case 'e':                    
+                    switch (currentEventID) // init event data and switch update state
+                    {
+                        case 1:
+                            // scroll single turtle until reaches player
+                            currentDialogState = DialogState.Event01;
+                            break;
+
+                        case 2:
+                            // await E input
+                            currentDialogState = DialogState.Event02;
+                            break;
+
+                        case 3:
+                            // scroll single turtle until offscreen
+                            waitForEvent = true;
+                            currentDialogState = DialogState.Event03;
+                            break;
+
+                        case 4:
+                            // scroll tortoise until reaches player
+                            currentDialogState = DialogState.Event04;
+                            break;
+
+                        case 5:
+                            // tortoise reveal
+                            dummyTort.GetComponent<Animator>().SetBool("Event", true);
+                            dummyTort.GetComponent<Animator>().SetBool("InputHit", true);
+                            dummyTort.GetComponent<Animator>().SetBool("FailedInput", true);
+                            currentDialogState = DialogState.Event05;
+                            break;
+
+                        case 6:
+                            // play tortoise rejection animation
+                            dummyTort.GetComponent<Animator>().SetBool("Event", false);
+                            currentDialogState = DialogState.Event06;
+                            break;
+
+                        case 7:
+                            // initiate fresh terts ready for game start
+                            GameManager.current.Ctrl.state = GameController.GameState.INTRO;
+                            currentDialogState = DialogState.Printing;
+                            break;
+
+                        case 8:
+                            // start game
+                            currentDialogState = DialogState.Printing;
+                            break;
+                    }
+
+                    currentCharID += 4;
+                    ++currentEventID;
+                    break;
+
+                default: // not a valid control code, just print i guess
+                    ++currentCharID;
+                    break;
             }
-        }
-
-        dialogText.text = line.Remove(0, trimNo); // write dialog line into UI text
-        currentPendingDialog.RemoveAt(0); // remove used dialog from list
-
-        Debug.Log("Pushed processed line into dialog display: " + line.Remove(0, trimNo));
-
-        if (firstLine)
-        {
-            //if (currentCam == null)
-            //    BeginDialogBlock();
-            //else
-            //    StartCoroutine(WaitForCamThenOpenDialog());
-        }
-        else
-        {
-            StartTalkingSFX();
         }
     }
 
-    //IEnumerator WaitForCamThenOpenDialog()
-    //{
-    //    yield return new WaitUntil(CameraManager.current.CamIsBlending); // need to wait like a frame or something for blend to actually start
-
-    //    while (CameraManager.current.CamIsBlending()) // run until cam is finished blending
-    //    {
-    //        yield return null;
-    //    }
-
-    //    BeginDialogBlock(); // then open the prepared dialog
-    //}
-
-    void BeginDialogBlock()
+    public void BeginDialog()
     {
-        if (currentAnimator != null)
-            currentAnimator.SetBool("isTalking", true);
-
         dialogBox.SetActive(true);
-
-        StartTalkingSFX();
+        currentDialogState = DialogState.StartLine;
     }
 
-    public void EndDialogBlock()
+    public void EndDialog()
     {
-        //if (currentCam != null)
-        //    currentCam.enabled = false;
-
-        //if (currentAnimator != null)
-        //    currentAnimator.SetBool("isTalking", false);
-
-        //currentCam = null;
-        //currentAnimator = null;
-
-        //dialogBox.SetActive(false);
-        //GameManager.current.playerController.SetAllPauseState(false);
+        dialogBox.SetActive(false);
+        currentDialogState = DialogState.Closed;
     }
 
-    void StartTalkingSFX()
+    void LoadDialog()
     {
-        //AudioManager.current.SFXDefaultSource.clip = AudioManager.current.gibberish.GetRandomizedClip();
-        //AudioManager.current.SFXDefaultSource.loop = false;
-        //AudioManager.current.SFXDefaultSource.Play();
-    }
-
-    IEnumerator LoadDialogFromFile()
-    {
-#if UNITY_WEBGL || UNITY_EDITOR // comment out editor if releasing as exe
-        UnityWebRequest www = UnityWebRequest.Get(dialogFilePath);
-
-        yield return www.SendWebRequest();
-
-        Debug.Log(www.isDone);
-        Debug.Log(www.downloadHandler.text);
-
-        if (www.isNetworkError || www.isHttpError)
-        {
-            dialogText.text = "Uh oh! Looks like the game failed to get the dialog from the server for some reason :( Refresh and try again. Let me know if you think it's my fault and I'll try to fix it lol";
-            dialogBox.SetActive(true);
-
-            Debug.Log("eeerror");
-            yield break;
-        }
-        Debug.Log("done?");
-
-        isLoaded = true;
-        byte[] results = www.downloadHandler.data;
-
-        MemoryStream s = new MemoryStream(results);
-        StreamReader file = new StreamReader(s);
-#else
-        isLoaded = true;
-        StreamReader file = new StreamReader(dialogFilePath);
-#endif
-        uint blockID = 0;
-        List<string> block = new List<string>();
-
-        Debug.Log("begin dialog file read");
-
-        while (!file.EndOfStream)
-        {
-            string line = file.ReadLine(); // read in next line
-
-            // check if line is start of new block
-            if (line[0] == 'x') // yes
-            {
-                // process completed block
-                List<string> blockCopy = new List<string>();
-
-                foreach (string l in block)
-                    blockCopy.Add((string)l.Clone());
-
-                dialogDictionary.Add(blockID, blockCopy);
-                block.Clear();
-
-                Debug.Log("Block " + blockID + " added to block dictionary");
-                ++blockID;
-            }
-            else // no
-            {
-                // add line to current block
-                block.Add(line);
-
-                Debug.Log("Line (" + line + ") added to block " + blockID);
-            }
-        }
-
-        // process final block
-        List<string> finalBlockCopy = new List<string>();
-
-        foreach (string l in block)
-            finalBlockCopy.Add((string)l.Clone());
-
-        dialogDictionary.Add(blockID, finalBlockCopy);
-        Debug.Log("Block " + blockID + " added to block dictionary");
-
-        Debug.Log("end dialog file read");
-
-        file.Close();
-
-        yield return null;
+        dialogLines.Add("* Welcome to the factory!");
+        dialogLines.Add("* Your job here will be to get these turtles back in working order.");
+        dialogLines.Add("* How?");
+        dialogLines.Add("* Why,[p] with heartfelt words of encouragement of course!");
+        dialogLines.Add("* Didn’t you...[p] know what you signed up for?");
+        dialogLines.Add("* ...");
+        dialogLines.Add("* Anyway,[p] this is your job now.[p] It’s not so bad...");
+        dialogLines.Add("* Especially when you get to see so many precious happy turtle faces the moment their confidence has been restored anew.");
+        dialogLines.Add("* OK,[p] let’s give it a try.[p] Here comes one now![e1]");
+        dialogLines.Add("* Just do your best[p] (press E to do your best)[e2]");
+        dialogLines.Add("* Alright![p] Great job![p] Amazing!");
+        dialogLines.Add("* [e3]Just look at the little guy go.");
+        dialogLines.Add("* Since it’s your first day,[p] I’ll supervise for now,[p] just to make sure you get the hang of things.");
+        dialogLines.Add("* Let’s get started![e4]");
+        dialogLines.Add("* Oh no![p] Look at this poor sweet baby.[p] He can’t even bear to show his face!");
+        dialogLines.Add("* Let’s give him our best--[p] WAIT A SECOND[e5]");
+        dialogLines.Add("* Oh no you don’t!![e6]");
+        dialogLines.Add("* /SIGH/...");
+        dialogLines.Add("* Watch out for tortoises...[p] (press F to dispose of tortoises)");
+        dialogLines.Add("* You do[p] /NOT/[p] want to accidentally give[p] /THEM/[p] any kind of encouragement.");
+        dialogLines.Add("* One kind word and...[p] we’ll never have peace again.");
+        dialogLines.Add("* ...");
+        dialogLines.Add("* ...At least they’re easy enough to tell apart.");
+        dialogLines.Add("* [e7]Go on, now.[p] You’ve got this![e8]");
     }
 }
